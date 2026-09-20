@@ -1,0 +1,110 @@
+# Verdict
+
+> Verdict is an open-source, self-hosted fraud & risk **decisioning** engine. You send it an
+> event; it scores the event against readable, versioned rules and returns a verdict — `allow`,
+> `challenge`, `review`, or `deny` — with a 0–100 score and the exact reasons. It is the
+> decisioning layer: you bring the signals you have, it makes the auditable call in one
+> synchronous request. This file is written for LLM code assistants integrating Verdict.
+
+Base URL is the engine you deploy (e.g. `http://localhost:4000`). All examples use that as
+`$VERDICT`. Nothing here requires the public site — Verdict runs on your infrastructure.
+
+## Authentication
+
+- **Service calls** (decisions, chargeback labels) use a service API key in a header:
+  `X-API-Key: vk_live_…`. An admin creates keys in the dashboard → Keys (shown once).
+- **Operator/admin endpoints** use a bearer token from `POST /v1/auth/login`:
+  `Authorization: Bearer <token>`. Tokens expire after 12h. The first registered user bootstraps
+  as admin; registration then closes.
+
+## Score an event — the one endpoint on the request path
+
+Call this right before you commit a protected action (charge, login, payout), then branch on the
+verdict.
+
+```
+POST $VERDICT/v1/decisions
+Headers: X-API-Key: vk_live_…   (optional: Idempotency-Key, X-Correlation-Id)
+Body:
+{
+  "type": "card.authorize",
+  "amount": 3500, "currency": "USD",
+  "subject": { "userId": "usr_1", "deviceId": "dev_1", "ip": "203.0.113.7",
+               "phone": "+251900000001", "channel": "visa" },
+  "instrument": { "kind": "card", "bin": "411111", "issuerCountry": "US", "threeDS": false }
+}
+```
+
+- `type` (required): `card.authorize` | `card.capture` | `card.refund` | `payment.authorize` |
+  `wallet.withdraw` | `account.login` | `order.place`.
+- `subject.userId` (required). `deviceId`, `ip`, `phone` (MSISDN, for mobile-money/telecom),
+  `channel` are optional and become graph/velocity signals. Send what you have.
+- `instrument.bin` is the card BIN only — **never send a full PAN**.
+
+Response:
+```
+{
+  "id": "vd_…", "eventId": "evt_…",
+  "verdict": "review", "score": 55,
+  "reasons": [{ "tag": "takeover", "points": 33 }, { "tag": "no_3ds", "points": 22 }],
+  "policyId": "pol_card_authorize", "policyVersion": "v0.4.0",
+  "decidedAt": "2026-09-17T10:22:00.000Z"
+}
+```
+
+Handle the verdict: `allow` → proceed · `challenge` → step the user up (3-D Secure / OTP) ·
+`review` → hold; a case opens for an analyst · `deny` → block. `reasons` is the full, attributable
+explanation. `429` means rate-limited — honor `Retry-After`. Save `eventId` to correlate a later
+chargeback.
+
+## Feed outcomes back (so scoring learns)
+
+```
+POST $VERDICT/v1/labels/chargeback     Headers: X-API-Key      Body: { "eventId": "evt_…" }
+```
+
+Analysts also resolve `review` cases in the dashboard, which records fraud/legit labels. Labels
+train the adaptive model and power backtesting.
+
+A machine-readable **OpenAPI 3.1** spec is served at `/openapi.json` (feed it to codegen or your
+assistant). The human reference with every field is at `/api-reference`.
+
+## Other endpoints (see /api-reference for every field)
+
+- `GET  /health` — liveness (public).
+- `GET  /v1/analytics/summary` — verdict mix, false-positive rate, label counts (operator).
+- `GET  /v1/graph/:kind/:id` — entity graph; `kind` is `user`|`device`|`ip`|`phone`. Returns
+  linked entities + `ringSize` (fraud-ring size). A shared phone drives `graph.usersOnPhone`
+  (SIM-box / mobile-money account farming) (operator).
+- `GET  /v1/rules` · `POST /v1/rules` — read / author versioned rulesets (admin).
+- `GET  /v1/policies` · `POST /v1/policies` — versioned score→verdict bands (admin).
+- `POST /v1/backtest` — replay a candidate rule/policy over labeled history; returns precision,
+  recall and deltas vs the live policy — test before you publish (admin).
+- `GET/POST /v1/webhooks` — register endpoints for signed event delivery (admin). Deliveries POST
+  `{ id, type, occurredAt, correlationId, data }` with header `X-Verdict-Signature: sha256=<hmac>`
+  (verify it with the endpoint secret).
+- `GET  /v1/model` — the adaptive model's learned per-signal weights (operator).
+- `POST /v1/privacy/erase` — right-to-erasure for a user (admin).
+
+## Rules a code assistant should know
+
+Rules are declarative and read a flat signal namespace: `event.*`, `instrument.*`, `velocity.*`,
+`device.*`, `geo.*`, `graph.*` (incl. `graph.ringSize`, `graph.usersOnPhone`), `anomaly.*`
+(e.g. `anomaly.amountZScore`), and `attr.<yourKey>`. A rule adds weighted points under a tag;
+scoring sums them 0–100; a policy maps score bands to a verdict. Everything is versioned and
+backtestable.
+
+## MCP (native LLM integration)
+
+Verdict ships an MCP server (`verdict-mcp`) exposing tools: `decide`, `recent_decisions`,
+`analytics_summary`, `lookup_entity`, `list_rules`, `model_weights`, `backtest_policy`. Point
+Claude Code / Claude Desktop / Cursor at `verdict-mcp/dist/index.js` with `VERDICT_API_URL`,
+`VERDICT_API_KEY`, `VERDICT_TOKEN`. Then drive Verdict in natural language.
+
+## Honest notes
+
+- Verdict is a **decisioning** layer, not a data-enrichment vendor — you provide the signals.
+- Self-hosted: your data never leaves your infra. Multi-replica needs `REDIS_URL`; a single node
+  runs on in-memory adapters.
+- Scoring today is transparent rules + a label-frequency learned model (not a trained ML model
+  yet). The `ScorerPort` seam accepts a trained/ONNX model as a drop-in.
