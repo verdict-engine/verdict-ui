@@ -53,7 +53,7 @@ const phases: Phase[] = [
     ],
   },
   {
-    ver: "v0.9",
+    ver: "v0.8",
     status: "Shipped",
     state: "done",
     title: "Intelligence",
@@ -104,11 +104,26 @@ const phases: Phase[] = [
     goal: "Run it big, run it calm.",
     items: [
       { label: "Durable, throttled notifications", done: true },
+      { label: "Batch & async decisions", done: true },
+      { label: "Config-change audit log", done: true },
+      { label: "Dashboard / docs test coverage", done: true },
+      { label: "Cloud-backed, hot-swappable model", done: true },
+      { label: "Storage stats & disk reclaim", done: true },
       { label: "Typed tables for high-volume reads" },
-      { label: "Batch & async decisions" },
-      { label: "Config-change audit log" },
-      { label: "Dashboard / docs test coverage" },
       { label: "SDK development (client SDKs)" },
+    ],
+  },
+  {
+    ver: "v1.2",
+    status: "Shipped",
+    state: "done",
+    title: "Smarter signals",
+    goal: "Catch more, explain it all.",
+    items: [
+      { label: "IP geolocation & impossible travel", done: true },
+      { label: "Device fingerprinting & cloning signals", done: true },
+      { label: "Trained ML scorer (synthetic data)", done: true },
+      { label: "Explainable per-feature reasons", done: true },
     ],
   },
   {

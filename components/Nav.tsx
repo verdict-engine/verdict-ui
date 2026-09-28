@@ -1,5 +1,8 @@
 import { Logo } from "./Logo";
 import { ThemeToggle } from "./ThemeToggle";
+import { DocSearch } from "./DocSearch";
+import { GitHubStars } from "./GitHubStars";
+import { withBase } from "@/lib/site";
 
 const links = [
   { href: "/#features", label: "Features" },
@@ -13,19 +16,20 @@ export function Nav() {
   return (
     <header className="nav">
       <div className="wrap nav-in">
-        <a className="brand" href="/">
+        <a className="brand" href={withBase("/")}>
           <Logo />
           VERDICT
         </a>
         <nav className="nav-links">
           {links.map((l) => (
-            <a key={l.href} href={l.href}>
+            <a key={l.href} href={withBase(l.href)}>
               {l.label}
             </a>
           ))}
         </nav>
         <div className="nav-right">
-          <span className="ghpill mono">★ 2.4k</span>
+          <DocSearch />
+          <GitHubStars />
           <ThemeToggle />
         </div>
       </div>

@@ -1,26 +1,9 @@
 import { DocNav } from "./DocNav";
-
-const SECTIONS: [string, string][] = [
-  ["intro", "Introduction"],
-  ["quickstart", "Quickstart"],
-  ["integrate", "Integration"],
-  ["bestpractices", "Best practices"],
-  ["usecases", "Use cases"],
-  ["mcp", "LLM & MCP"],
-  ["events", "Events & fields"],
-  ["signals", "Signals & rules"],
-  ["verdicts", "Verdicts & scoring"],
-  ["configure", "Configuration"],
-  ["operate", "Operating"],
-  ["intelligence", "Intelligence"],
-  ["governance", "Data governance"],
-  ["deploy", "Deployment"],
-  ["capacity", "Requirements & capacity"],
-  ["security", "Security"],
-];
+import { DOC_SECTIONS as SECTIONS } from "@/lib/doc-sections";
+import { withBase } from "@/lib/site";
 
 const QUICKSTART = `# 1 · bring up postgres + engine + dashboard
-git clone https://github.com/your-org/verdict-engine && cd verdict-engine
+git clone https://github.com/verdict-engine/verdict-engine && cd verdict-engine
 AUTH_SECRET=$(openssl rand -hex 32) docker compose up --build
 
 #   db         postgres 16 · durable users, cases, verdicts, keys, graph
@@ -66,6 +49,96 @@ switch (verdict) {
   case "challenge": return stepUp();          // 3-D Secure / OTP
   case "review":    return hold(order.id);     // a case opens for an analyst
   default:          return proceed();          // "allow"
+}`;
+
+const SDK_TS = `import { VerdictClient } from "@verdict/sdk";
+
+const verdict = new VerdictClient({ apiKey: process.env.VERDICT_API_KEY });
+
+const decision = await verdict.decide({
+  type: "card.authorize",
+  amount: order.amount, currency: order.currency,
+  subject: { userId: order.userId, ip: req.ip, fingerprint },
+}, { idempotencyKey: order.id });        // retries return the same decision
+
+switch (decision.verdict) {
+  case "deny":      return block(decision.reasons);
+  case "challenge": return stepUp();
+  case "review":    return hold(order.id);
+  default:          return proceed();
+}`;
+
+const SDK_DART = `import 'package:verdict_sdk/verdict.dart';
+
+final verdict = VerdictClient(apiKey: apiKey);
+
+final decision = await verdict.decide(const VerdictEvent(
+  type: VerdictEventType.cardAuthorize,
+  amount: 4900, currency: 'ETB',
+  subject: Subject(userId: 'usr_3f9a', ip: '196.188.120.4', fingerprint: 'fp_9c1e'),
+));
+
+if (decision.verdict == Verdict.deny) block(decision.reasons);`;
+
+const SDK_INSTALL = `# TypeScript / JavaScript (Node 18+, Deno, Bun, edge)
+npm i @verdict/sdk
+
+# Flutter / Dart — in pubspec.yaml:
+#   dependencies:
+#     verdict_sdk: ^0.1.0`;
+
+const SDK_TS_ERRORS = `import {
+  VerdictClient,
+  VerdictRateLimitError, VerdictAuthError, VerdictConnectionError,
+} from "@verdict/sdk";
+
+const verdict = new VerdictClient({
+  apiKey: process.env.VERDICT_API_KEY,
+  baseUrl: "https://verdict.internal",  // default http://localhost:4000
+  timeoutMs: 10_000,                     // per request
+  maxRetries: 2,                         // 429 / 5xx / network, backoff + Retry-After
+});
+
+try {
+  const decision = await verdict.decide(event, { idempotencyKey: order.id });
+  // …act on decision.verdict…
+} catch (err) {
+  if (err instanceof VerdictRateLimitError)   await backoff(err.retryAfterMs);
+  else if (err instanceof VerdictAuthError)   rotateKey();       // 401 / 403
+  else if (err instanceof VerdictConnectionError) failOpen();    // outage — your call
+  else throw err;                                                // 400 / 5xx
+}
+
+verdict.rateLimit;   // { limit, remaining } from the last response's headers`;
+
+const SDK_TS_MORE = `// Batch — up to 100, order preserved; a bad event fails only its own entry
+for (const r of await verdict.decideBatch(events)) {
+  if (r.ok) act(r.decision);
+  else      log(r.error.code);
+}
+
+// Async — 202 now, verdict later (poll, or subscribe a webhook to verdict.reached.v1)
+const { id } = await verdict.decideAsync({ id: "evt_9f2a", ...event });
+const decision = await verdict.getDecision(id);  // throws VerdictNotFoundError while pending
+
+// Close the loop — record a chargeback as a fraud label (needs the "labels" scope)
+await verdict.recordChargeback(order.eventId);`;
+
+const SDK_DART_MORE = `try {
+  final decision = await verdict.decide(event, idempotencyKey: order.id);
+  if (decision.verdict == Verdict.deny) block(decision.reasons);
+} on VerdictRateLimitException catch (e) {
+  await Future<void>.delayed(e.retryAfter ?? const Duration(seconds: 1));
+} on VerdictConnectionException {
+  failOpen();   // engine outage — availability vs safety is your call
+}
+
+// Batch results are a sealed type — switch exhaustively
+for (final item in await verdict.decideBatch(events)) {
+  switch (item) {
+    case BatchOk(:final decision): act(decision);
+    case BatchError(:final code):  log(code);
+  }
 }`;
 
 const RESPONSE = `{
@@ -167,6 +240,16 @@ export function DocsContent() {
           <p>From your first decision to a production deployment — the full path, in depth.</p>
         </div>
 
+        <div className="doc-beta" role="note">
+          <span className="doc-beta-tag mono">Beta</span>
+          <p>
+            Verdict is <b>currently in beta</b> (<span className="mono">v0.7.0</span>, pre-1.0). It&apos;s
+            functional and self-hostable, but APIs, schemas, and defaults may still change between releases —{" "}
+            <b>pin a version</b>, review the changelog before upgrading, and evaluate carefully before relying
+            on it in production. It&apos;s open source (Apache-2.0); issues and contributions are welcome.
+          </p>
+        </div>
+
         <div className="doc-layout">
           <DocNav sections={SECTIONS} />
 
@@ -237,7 +320,10 @@ export function DocsContent() {
                     Right before you commit the action you want to protect — authorize a charge, complete a
                     login, release a payout — send the event to <span className="mono">POST /v1/decisions</span>{" "}
                     and wait for the verdict (a single synchronous call). Send every identifier you have; absent
-                    fields simply mean the rules that read them don&apos;t fire.
+                    fields simply mean the rules that read them don&apos;t fire. Backfilling or scoring in bulk?
+                    Use <span className="mono">POST /v1/decisions/batch</span> (up to 100 events at once) or, to
+                    keep it off your response path, <span className="mono">POST /v1/decisions/async</span> (202 +
+                    an id you poll at <span className="mono">GET /v1/decisions/&#123;id&#125;</span> or receive by webhook).
                   </p>
                 </li>
                 <li>
@@ -295,7 +381,85 @@ export function DocsContent() {
               <pre className="doc-code">{RESPONSE}</pre>
               <p>
                 Every field of the request and response is defined in the{" "}
-                <a href="/api-reference">API reference</a>.
+                <a href={withBase("/api-reference")}>API reference</a>. Prefer a client library? The{" "}
+                <a href="#sdks">official SDKs</a> wrap all of this — typed calls, retries and timeouts included.
+              </p>
+            </section>
+
+            <section id="sdks" className="doc-sec">
+              <h3>SDKs</h3>
+              <p>
+                Official client libraries wrap the API-key data plane so you don&apos;t hand-write HTTP: typed
+                events and verdicts, a per-request timeout, and automatic retry with backoff on{" "}
+                <span className="mono">429</span>/<span className="mono">5xx</span>/network errors (honoring{" "}
+                <span className="mono">Retry-After</span>). They cover the integrator endpoints only — operator
+                and admin actions (auth, cases, rules, config) stay in the dashboard.
+              </p>
+              <table className="doc-tbl full">
+                <tbody>
+                  <tr><td>TypeScript / JavaScript</td><td className="mono">@verdict/sdk</td><td>Available</td></tr>
+                  <tr><td>Dart / Flutter</td><td className="mono">verdict_sdk</td><td>Available</td></tr>
+                  <tr><td>Python</td><td className="mono">verdict-sdk</td><td>Planned</td></tr>
+                  <tr><td>React Native</td><td className="mono">@verdict/react-native</td><td>Planned</td></tr>
+                </tbody>
+              </table>
+
+              <div className="doc-code-h mono">1 · Install</div>
+              <pre className="doc-code">{SDK_INSTALL}</pre>
+
+              <div className="doc-code-h mono">2 · Score an event</div>
+              <p>
+                Construct a client once with your service key, then call <span className="mono">decide</span> on
+                your critical path. The <span className="mono">idempotencyKey</span> (an order id works well)
+                makes a retry return the original decision instead of scoring twice.
+              </p>
+              <div className="doc-code-h mono">TypeScript</div>
+              <pre className="doc-code">{SDK_TS}</pre>
+              <div className="doc-code-h mono">Flutter / Dart</div>
+              <pre className="doc-code">{SDK_DART}</pre>
+
+              <div className="doc-code-h mono">3 · Handle failure — decide how to fail</div>
+              <p>
+                A <span className="vt-deny">deny</span> should block; a <b>transport failure is a product
+                decision</b>. Each SDK throws a typed error/exception so you branch on the kind — rate limit,
+                auth, or an engine outage — and choose fail-open (allow, favor availability) or fail-closed
+                (challenge/deny, favor safety) per event type, mirroring the policy&apos;s{" "}
+                <span className="mono">on_error</span>. The client also surfaces the rate-limit budget from the
+                last response.
+              </p>
+              <div className="doc-code-h mono">TypeScript</div>
+              <pre className="doc-code">{SDK_TS_ERRORS}</pre>
+              <div className="doc-code-h mono">Flutter / Dart</div>
+              <pre className="doc-code">{SDK_DART_MORE}</pre>
+
+              <div className="doc-code-h mono">4 · Batch, async & feedback</div>
+              <p>
+                Score in bulk, move scoring off your response path, and feed outcomes back — all typed. Poll{" "}
+                <span className="mono">getDecision</span> for an async verdict, or (better at volume) subscribe a
+                webhook to <span className="mono">verdict.reached.v1</span>.
+              </p>
+              <pre className="doc-code">{SDK_TS_MORE}</pre>
+
+              <div className="api-params">
+                <div className="api-params-h">Method → endpoint</div>
+                <table className="api-tbl doc-tbl">
+                  <tbody>
+                    <Field n="decide(event, opts?)" t="POST /v1/decisions" d="Score one event synchronously → Decision." />
+                    <Field n="decideBatch(events)" t="POST /v1/decisions/batch" d="Up to 100 events; per-entry ok/error, order preserved." />
+                    <Field n="decideAsync(event)" t="POST /v1/decisions/async" d="202 + event id; verdict computed off the response path." />
+                    <Field n="getDecision(id)" t="GET /v1/decisions/:id" d="Fetch an async verdict; not-found error while pending." />
+                    <Field n="recordChargeback(id)" t="POST /v1/labels/chargeback" d="Record a chargeback as a fraud label (labels scope)." />
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="doc-callout">
+                <b>Keep service keys server-side.</b> A key shipped in a mobile or browser binary can be
+                extracted, so score from a trusted backend or proxy through your server — the SDKs target that
+                integrator context, not untrusted clients. Full method docs, options and error tables are in each
+                package&apos;s README (<span className="mono">@verdict/sdk</span> and{" "}
+                <span className="mono">verdict_sdk</span>); every field is in the{" "}
+                <a href={withBase("/api-reference")}>API reference</a>.
               </p>
             </section>
 
@@ -494,10 +658,10 @@ export function DocsContent() {
               </p>
               <p>
                 Prefer to wire it yourself with an LLM? Point your coding agent at{" "}
-                <a href="/llms.txt"><span className="mono">/llms.txt</span></a> — a self-contained integration brief
+                <a href={withBase("/llms.txt")}><span className="mono">/llms.txt</span></a> — a self-contained integration brief
                 (auth, the event schema, verdict handling, every endpoint, the signal namespace) written for code
                 assistants. Drop it into your repo or hand it to your agent and it can scaffold the integration
-                against the real contract; the full field-by-field <a href="/api-reference">API reference</a> is
+                against the real contract; the full field-by-field <a href={withBase("/api-reference")}>API reference</a> is
                 there too.
               </p>
             </section>
@@ -523,8 +687,9 @@ export function DocsContent() {
                     <Field n="type" t="enum (required)" d="Event type — selects the ruleset and policy." />
                     <Field n="amount / currency" t="number / string(3)" d="Value + ISO-4217 code for money-bearing events. Feeds amount and anomaly signals." />
                     <Field n="subject.userId" t="string (required)" d="The acting user — the primary graph node and anomaly key." />
-                    <Field n="subject.deviceId" t="string" d="Device fingerprint — velocity, first-seen and device-linking signals." />
-                    <Field n="subject.ip" t="string" d="Client IP — linked in the graph (shared-IP / ring). Never placed in URLs or logs." />
+                    <Field n="subject.deviceId" t="string" d="Stable device/client id — velocity, first-seen and device-linking signals." />
+                    <Field n="subject.fingerprint" t="string" d="Device fingerprint hash — reuse across users and fingerprint↔device mismatch (cloning/spoofing), independent of deviceId." />
+                    <Field n="subject.ip" t="string" d="Client IP — resolved to a location for geo signals, and linked in the graph (shared-IP / ring). Never placed in URLs or logs." />
                     <Field n="subject.phone" t="string" d="MSISDN for mobile-money / telecom rails — a graph entity; many accounts on one phone flags a SIM box." />
                     <Field n="subject.channel" t="string" d="Origin rail, e.g. visa, telebirr, web." />
                     <Field n="instrument.kind" t='"card" | "wallet" | "bank"' d="Payment instrument type." />
@@ -552,8 +717,8 @@ export function DocsContent() {
                     <Field n="event.*" t="type · channel · amount · currency" d="Straight from the event." />
                     <Field n="instrument.*" t="kind · bin · issuerCountry · threeDS" d="Payment instrument metadata." />
                     <Field n="velocity.*" t="attemptsLast2m · attemptsLast24h · amountLast1h" d="Rolling counters from the feature store." />
-                    <Field n="device.*" t="firstSeen · usersOnDevice" d="Device recency and sharing." />
-                    <Field n="geo.*" t="ipSimMismatch" d="Geo/network inconsistencies." />
+                    <Field n="device.*" t="firstSeen · usersOnDevice · usersOnFingerprint · fingerprintFirstSeen · fingerprintDeviceMismatch" d="Device & fingerprint recency, sharing, and cloning/spoofing." />
+                    <Field n="geo.*" t="country · distanceKm · countryChanged · impossibleTravel · ipSimMismatch" d="IP-resolved location, distance from the user's last location, and travel faster than a jet." />
                     <Field n="graph.*" t="ringSize · usersOnDevice · usersOnIp · usersOnPhone · devicesOnUser" d="Entity-graph link counts and cluster size — incl. accounts sharing a phone (SIM box)." />
                     <Field n="anomaly.*" t="amountZScore · amountMean · samples" d="Deviation from this user's own history." />
                     <Field n="attr.*" t="any scalar you send" d="Your custom attributes." />
@@ -592,6 +757,36 @@ export function DocsContent() {
                 tag. Because decisions are written to an <b>append-only verdict log</b>, any of them can be
                 replayed or backtested later.
               </p>
+              <p>
+                <b>Three scorers, one seam.</b> The default is the transparent hand-weighted sum. Set{" "}
+                <span className="mono">SCORER=learned</span> for the adaptive model that learns each tag&apos;s
+                fraud rate from your labels, or <span className="mono">SCORER=ml</span> for a{" "}
+                <b>trained logistic-regression model</b> that consumes the whole feature vector — velocity,
+                device fingerprint, geolocation, graph and anomaly signals, plus the rules&apos; own score — and
+                returns a calibrated risk with the per-feature terms as the <span className="mono">reasons</span>.
+                It is trained offline on a <b>synthetic dataset</b> (<span className="mono">npm run train:model</span>);
+                inference is a single dot-product plus a sigmoid, so it adds nothing to decision latency. All
+                three implement the same port, so switching is one environment variable — nothing else moves.
+                The ML weights are <b>hot-swappable</b> and can load from a <b>local file</b>
+                (<span className="mono">MODEL_PATH</span>), an <b>HTTPS URL</b> (<span className="mono">MODEL_URL</span>),
+                or <b>S3-compatible storage</b> (<span className="mono">MODEL_S3_*</span> — AWS S3, MinIO, R2, Spaces),
+                refreshed on a timer — validated against the feature vector, with the bundled weights as a safe
+                fallback — so you roll out a retrained model without a redeploy. See the active model and its
+                per-feature weights at <span className="mono">GET /v1/config/model</span>.
+              </p>
+              <p>
+                <b>Scaling the ML pipeline.</b> Serving and training scale independently by design.{" "}
+                <b>Serving</b> is a fixed-cost dot-product held in the image — no model server, no network hop,
+                no GPU — so it adds microseconds and scales horizontally with engine replicas, which each load
+                and validate the same weights. The practical ceiling at very high volume is the feature{" "}
+                <i>reads</i> (velocity, graph), not the model. <b>Training</b> is fully decoupled: the engine
+                never trains at runtime and only consumes a validated JSON weights file, so the bundled
+                gradient-descent trainer is just a reference — you can train on real labels at any scale in an
+                external batch job (Python, a GBM, a feature store) and publish the weights to{" "}
+                <span className="mono">MODEL_S3_*</span> on whatever cadence you retrain. Because labels arrive
+                as events (analyst resolutions and chargebacks), the same loop that improves the adaptive scorer
+                is the training set for the ML model.
+              </p>
             </section>
 
             <section id="configure" className="doc-sec">
@@ -609,7 +804,7 @@ export function DocsContent() {
                 so you can <b>roll back</b> in one click and <b>simulate</b> a score before shipping. Bands
                 must cover 0–100 with no gaps or overlaps — the engine validates this on publish and refuses an
                 invalid policy. All of this is live in the dashboard&apos;s <span className="mono">Configure</span>{" "}
-                tab, or over the <a href="/api-reference">config API</a>.
+                tab, or over the <a href={withBase("/api-reference")}>config API</a>.
               </p>
             </section>
 
@@ -621,6 +816,13 @@ export function DocsContent() {
                 <span className="vt-deny">fraud</span>, <span className="vt-allow">legit</span>, or
                 inconclusive. Every action is recorded on an append-only <b>audit trail</b>, and the analyst is
                 always taken from the authenticated token, never the request body.
+              </p>
+              <p>
+                Configuration changes are audited too. Every operator mutation — a rate-limit or retention
+                tweak, a published policy, a new alert channel or API key — is written to a{" "}
+                <b>config-change audit log</b> (<span className="mono">GET /v1/audit</span>) with the actor, the
+                action, the time and the result; secret-ish fields (URLs, tokens) are redacted before storage.
+                So &ldquo;who changed this, and when?&rdquo; always has an answer.
               </p>
               <p>
                 Resolving a case records a <b>label</b> — ground truth about that event. Chargebacks post the
@@ -756,7 +958,7 @@ export function DocsContent() {
                     <Field n="PORT" t="default 4000" d="Engine HTTP port." />
                     <Field n="VERDICT_API_URL" t="dashboard" d="Where the dashboard reaches the engine (e.g. http://engine:4000)." />
                     <Field n="PERSISTENCE" t="optional" d="Set to `memory` to explicitly accept a non-persistent deploy (demos only)." />
-                    <Field n="SCORER" t="optional" d="`weighted` (default) or `learned` — the adaptive model." />
+                    <Field n="SCORER" t="optional" d="`weighted` (default), `learned` (adaptive), or `ml` (trained model). Set MODEL_URL to hot-load ML weights from a cloud bucket." />
                     <Field n="RATE_LIMIT_DECISIONS_PER_MIN" t="default 600" d="Per-API-key budget for POST /v1/decisions before a 429." />
                     <Field n="RATE_LIMIT_LOGIN_PER_MIN" t="default 10" d="Per-IP budget for login — a brute-force brake." />
                     <Field n="TRUST_PROXY" t="default off" d="Proxy hops to trust for the real client IP (per-IP limits). Default ignores X-Forwarded-For so it can't be spoofed; set 1 behind a single LB." />
@@ -838,7 +1040,25 @@ export function DocsContent() {
                 Tune them per deployment via <span className="mono">RETENTION_*</span> env vars, or at runtime on
                 the dashboard&apos;s Configure tab (<span className="mono">GET/PUT /v1/config/retention</span>);{" "}
                 <span className="mono">POST /v1/config/retention/run</span> forces a sweep. Counts are exported as{" "}
-                <span className="mono">verdict_retention_pruned_total</span>.
+                <span className="mono">verdict_retention_pruned_total</span>. For disk management,{" "}
+                <span className="mono">GET /v1/config/storage</span> reports the store&apos;s size on disk and
+                per-collection row counts (also sampled into the <span className="mono">verdict_storage_*</span>{" "}
+                metrics each sweep) — so you can see what&apos;s growing; set{" "}
+                <span className="mono">RETENTION_VACUUM=true</span> to reclaim freed space promptly.
+              </p>
+              <p>
+                <b>Server disk health.</b> For Docker deployments where data sits on a volume, the same{" "}
+                <span className="mono">GET /v1/config/storage</span> (and the dashboard&apos;s Storage panel) also
+                reports the <b>filesystem</b> health of the disks that data lives on — total, free and used, per
+                mount — plus a <b>per-service breakdown</b> of what&apos;s consuming the disk (the document store,
+                and a disk-backed model file). Point <span className="mono">DISK_HEALTH_PATHS</span> at the volume
+                mounts you want watched; the engine can only see filesystems mounted into its <i>own</i>{" "}
+                container, so to watch the Postgres volume from here, bind-mount it (read-only) into the engine —
+                otherwise monitor the database container&apos;s volume with node_exporter or cAdvisor. The values
+                are exported as <span className="mono">verdict_disk_total_bytes</span>,{" "}
+                <span className="mono">verdict_disk_free_bytes</span>,{" "}
+                <span className="mono">verdict_disk_used_ratio</span> and{" "}
+                <span className="mono">verdict_disk_component_bytes</span> for alerting.
               </p>
             </section>
 

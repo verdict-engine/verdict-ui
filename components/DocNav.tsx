@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { withBase } from "@/lib/site";
 
 const EXTERNAL = [
   { href: "/api-reference", label: "API reference →" },
@@ -46,7 +47,7 @@ export function DocNav({ sections }: { sections: [string, string][] }) {
         </a>
       ))}
       {EXTERNAL.map((e) => (
-        <a key={e.href} className="doc-nav-ext" href={e.href}>
+        <a key={e.href} className="doc-nav-ext" href={withBase(e.href)}>
           {e.label}
         </a>
       ))}

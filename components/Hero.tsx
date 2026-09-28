@@ -1,13 +1,14 @@
 import { InstallCommand } from "./InstallCommand";
+import { withBase } from "@/lib/site";
 
 export function Hero() {
   return (
     <section className="hero" id="top">
       <div className="wrap">
-        <span className="announce mono">
-          <span className="arw">▲</span> Announcement{" "}
-          <b>| v0.4 — weighted scoring in preview</b> <span className="arw">→</span>
-        </span>
+        <a className="announce mono" href={withBase("/docs")}>
+          <span className="arw">▲</span> Beta{" "}
+          <b>| Verdict is currently in beta — v0.7.0, pre-1.0</b> <span className="arw">→</span>
+        </a>
         <h1 className="headline">
           The open-source fraud engine that returns a verdict.
         </h1>

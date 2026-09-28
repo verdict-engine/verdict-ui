@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { DocsContent } from "@/components/DocsContent";
+import { SearchHighlight } from "@/components/SearchHighlight";
 
 export const metadata: Metadata = {
   title: "Verdict — Docs",
@@ -15,6 +16,7 @@ export default function DocsPage() {
       <main>
         <DocsContent />
       </main>
+      <SearchHighlight />
       <Footer />
     </>
   );

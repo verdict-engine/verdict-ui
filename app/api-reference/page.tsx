@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { ApiReference } from "@/components/ApiReference";
+import { SearchHighlight } from "@/components/SearchHighlight";
 
 export const metadata: Metadata = {
   title: "Verdict — API reference",
@@ -15,6 +16,7 @@ export default function ApiReferencePage() {
       <main>
         <ApiReference />
       </main>
+      <SearchHighlight />
       <Footer />
     </>
   );

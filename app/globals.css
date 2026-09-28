@@ -211,6 +211,8 @@ header.nav {
   font-size: 12px;
   color: var(--ink-soft);
 }
+a.ghpill { text-decoration: none; transition: border-color 0.15s ease, color 0.15s ease; }
+a.ghpill:hover { border-color: var(--review); color: var(--ink); }
 @media (max-width: 780px) {
   .nav-links {
     display: none;
@@ -240,6 +242,8 @@ header.nav {
 .announce .arw {
   color: var(--mute);
 }
+a.announce { text-decoration: none; transition: border-color 0.15s ease; }
+a.announce:hover { border-color: var(--review); }
 h1.headline {
   font-size: clamp(36px, 5.6vw, 62px);
   line-height: 1.03;
@@ -1021,13 +1025,18 @@ footer {
 
 /* docs */
 .doc-layout { display: grid; grid-template-columns: 190px 1fr; gap: 40px; align-items: start; }
-@media (max-width: 820px) { .doc-layout { grid-template-columns: 1fr; } .doc-nav { display: none; } }
 .doc-nav { position: sticky; top: 84px; display: grid; gap: 3px; }
 .doc-nav a { font-family: var(--font-mono-stack); font-size: 12.5px; color: var(--mute); padding: 6px 0 6px 14px; border-left: 2px solid var(--line); }
 .doc-nav a:hover { color: var(--ink); border-color: var(--faint); }
 .doc-nav a.active { color: var(--ink); border-color: var(--ink); font-weight: 500; }
 .doc-nav .doc-nav-ext { margin-top: 12px; color: var(--accent-ink); border-color: var(--line-2); }
 .doc-main { max-width: 70ch; min-width: 0; }
+/* Responsive override — MUST come after the base .doc-nav rules so `display: none` actually wins
+   (equal-specificity rules are resolved by source order). Below 820px the sidebar collapses. */
+@media (max-width: 820px) {
+  .doc-layout { grid-template-columns: 1fr; }
+  .doc-nav { display: none; }
+}
 .doc-sec { padding-bottom: 34px; margin-bottom: 34px; border-bottom: 1px solid var(--line); scroll-margin-top: 84px; }
 .doc-sec:last-child { border-bottom: none; }
 .doc-sec h3 { font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; }
@@ -1038,6 +1047,20 @@ footer {
 .doc-list { margin: 0 0 14px; padding-left: 18px; display: grid; gap: 9px; }
 .doc-list li { font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
 .doc-callout { border: 1px solid var(--line-2); border-left: 2px solid var(--review); background: var(--panel); padding: 12px 16px; font-size: 14px; }
+
+.doc-beta {
+  display: flex; gap: 14px; align-items: flex-start;
+  border: 1px solid var(--line-2); border-left: 3px solid var(--review);
+  background: var(--panel);
+  background: color-mix(in srgb, var(--review) 8%, var(--panel));
+  padding: 14px 18px; margin: 24px 0 4px; border-radius: 4px;
+}
+.doc-beta p { margin: 0; font-size: 13.5px; color: var(--ink); line-height: 1.55; }
+.doc-beta-tag {
+  flex: 0 0 auto; margin-top: 1px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--bg); background: var(--review);
+  padding: 3px 9px; border-radius: 3px;
+}
 
 .doc-steps { list-style: none; counter-reset: step; margin: 4px 0 18px; padding: 0; display: grid; gap: 14px; }
 .doc-steps > li { counter-increment: step; position: relative; padding-left: 44px; }
@@ -1080,4 +1103,103 @@ footer {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ── Docs command-palette search (⌘K) ─────────────────────────────── */
+.doc-search-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border: 1px solid var(--line-2); border-radius: 8px;
+  background: var(--panel); color: var(--mute); cursor: pointer;
+  font-size: 13px; transition: border-color 0.15s, color 0.15s;
+}
+.doc-search-btn:hover { border-color: var(--faint); color: var(--ink-soft); }
+.doc-search-ic { font-size: 15px; line-height: 1; }
+.doc-search-kbd, .doc-search-foot kbd {
+  font-family: var(--font-mono-stack); font-size: 10.5px; color: var(--mute);
+  border: 1px solid var(--line-2); border-radius: 5px; padding: 1px 5px; background: var(--bg);
+}
+@media (max-width: 720px) { .doc-search-txt, .doc-search-kbd { display: none; } }
+
+.doc-search-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 14vh 16px 16px;
+}
+.doc-search-panel {
+  width: 100%; max-width: 620px; background: var(--panel);
+  border: 1px solid var(--faint); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.45);
+}
+.doc-search-input {
+  width: 100%; box-sizing: border-box; border: 0; outline: 0;
+  background: transparent; color: var(--ink);
+  padding: 17px 18px; font-size: 16px; border-bottom: 1px solid var(--line);
+}
+.doc-search-input::placeholder { color: var(--mute); }
+.doc-search-results { list-style: none; margin: 0; padding: 6px; max-height: 52vh; overflow-y: auto; }
+.doc-search-row {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 12px; border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+}
+.doc-search-row.on { background: color-mix(in srgb, var(--review) 12%, transparent); }
+.doc-search-kind {
+  flex: none; width: 52px; text-align: center; font-family: var(--font-mono-stack);
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--mute); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 0; margin-top: 1px;
+}
+.doc-search-kind.k-docs { color: var(--ink-soft); }
+.doc-search-kind.k-post, .doc-search-kind.k-put { color: var(--ink); border-color: var(--faint); }
+.doc-search-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.doc-search-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.doc-search-title .mono { color: var(--ink); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-search-crumb {
+  flex: none; color: var(--mute); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 5px;
+}
+.doc-search-snip {
+  color: var(--ink-soft); font-size: 12px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.doc-search-row.on .doc-search-snip { color: var(--ink); }
+.doc-search-empty { padding: 20px 14px; color: var(--mute); font-size: 14px; }
+.doc-search-foot {
+  display: flex; gap: 16px; padding: 9px 14px; border-top: 1px solid var(--line);
+  color: var(--mute); font-size: 11px;
+}
+.doc-search-foot span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── Search landing highlight (flash → settle → fade) ─────────────── */
+/* Primary: CSS Custom Highlight API — highlights ranges without touching the DOM, so React
+   re-renders can't wipe it. ::highlight() only supports a few paint properties (no box-shadow),
+   so the "flash" is a bright→soft→faint background swap driven by classes on <html>. */
+::highlight(verdict-search) {
+  background-color: color-mix(in srgb, var(--review) 30%, transparent);
+  color: inherit;
+}
+html.hl-flash::highlight(verdict-search) {
+  background-color: var(--review);
+  color: #1a1400;
+}
+html.hl-dim::highlight(verdict-search) {
+  background-color: color-mix(in srgb, var(--review) 10%, transparent);
+}
+
+/* Fallback: <mark> injection for browsers without the Highlight API (keeps the pulse animation). */
+.doc-hl {
+  background: color-mix(in srgb, var(--review) 34%, transparent);
+  color: inherit; border-radius: 3px; padding: 0 2px; margin: 0 -1px;
+  box-shadow: 0 0 0 0 transparent;
+  animation: doc-hl-pop 1.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: background 0.85s ease, box-shadow 0.85s ease, color 0.85s ease;
+}
+.doc-hl.fade { background: transparent; box-shadow: none; }
+@keyframes doc-hl-pop {
+  0%   { background: var(--review); color: #1a1400; box-shadow: 0 0 0 6px color-mix(in srgb, var(--review) 28%, transparent); }
+  55%  { box-shadow: 0 0 0 3px color-mix(in srgb, var(--review) 18%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-hl { animation: none; }
 }

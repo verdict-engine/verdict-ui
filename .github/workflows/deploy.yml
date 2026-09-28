@@ -1,0 +1,63 @@
+name: Deploy docs to GitHub Pages
+
+# Builds the Next.js static export and publishes it to GitHub Pages on every push to main.
+# One-time setup: repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least-privilege token the deploy-pages action needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two Pages deploys at once; don't cancel an in-flight publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run type-check
+
+      - run: npm test
+
+      - name: Build static export
+        run: npm run build
+        env:
+          # Project Pages live at https://<org>.github.io/verdict-ui/ — serve assets under that path.
+          # Using a custom domain or an <org>.github.io repo? Remove this to build at the root instead.
+          NEXT_PUBLIC_BASE_PATH: /verdict-ui
+
+      # GitHub Pages runs Jekyll by default, which drops Next's _next/ directory; this opts out.
+      - run: touch out/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

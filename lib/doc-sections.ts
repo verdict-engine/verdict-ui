@@ -1,0 +1,20 @@
+/** The docs page's sections, as [anchor id, title]. Shared by the docs sidebar and the search index. */
+export const DOC_SECTIONS: [string, string][] = [
+  ["intro", "Introduction"],
+  ["quickstart", "Quickstart"],
+  ["integrate", "Integration"],
+  ["sdks", "SDKs"],
+  ["bestpractices", "Best practices"],
+  ["usecases", "Use cases"],
+  ["mcp", "LLM & MCP"],
+  ["events", "Events & fields"],
+  ["signals", "Signals & rules"],
+  ["verdicts", "Verdicts & scoring"],
+  ["configure", "Configuration"],
+  ["operate", "Operating"],
+  ["intelligence", "Intelligence"],
+  ["governance", "Data governance"],
+  ["deploy", "Deployment"],
+  ["capacity", "Requirements & capacity"],
+  ["security", "Security"],
+];

@@ -55,8 +55,9 @@ export const endpoints: Endpoint[] = [
       { name: "amount", type: "number", required: false, desc: "Transaction value, for money-bearing events. Non-negative. Feeds amount rules and the per-user anomaly baseline." },
       { name: "currency", type: "string(3)", required: false, desc: "ISO-4217 code, e.g. USD, ETB. Required when amount is present." },
       { name: "subject.userId", type: "string", required: true, desc: "The acting user's stable id. The primary entity in the graph and the key for anomaly baselines." },
-      { name: "subject.deviceId", type: "string", required: false, desc: "Device fingerprint. Powers velocity, first-seen and device-linking (graph) signals." },
-      { name: "subject.ip", type: "string", required: false, desc: "Client IP. Linked in the entity graph (shared-IP / ring signals). Never placed in URLs or logs." },
+      { name: "subject.deviceId", type: "string", required: false, desc: "Stable device/client id. Powers velocity, first-seen and device-linking (graph) signals." },
+      { name: "subject.fingerprint", type: "string", required: false, desc: "Client-computed device fingerprint hash. Drives device.usersOnFingerprint and device.fingerprintDeviceMismatch (same fingerprint on a different deviceId — cloning/spoofing), independent of deviceId." },
+      { name: "subject.ip", type: "string", required: false, desc: "Client IP. Resolved to a coarse location for geo.country / geo.distanceKm / geo.impossibleTravel, and linked in the entity graph (shared-IP / ring signals). Never placed in URLs or logs." },
       { name: "subject.phone", type: "string", required: false, desc: "MSISDN (phone number) for mobile-money / telecom rails. A graph entity — flags SIM-box / account-farming via graph.usersOnPhone." },
       { name: "subject.channel", type: "string", required: false, desc: 'Origin rail, e.g. "visa", "telebirr", "web".' },
       { name: "instrument.kind", type: '"card" | "wallet" | "bank"', required: false, desc: "Payment instrument type, for value-bearing events." },
@@ -68,7 +69,7 @@ export const endpoints: Endpoint[] = [
     request: `{
   "type": "card.authorize",
   "amount": 3500, "currency": "USD",
-  "subject": { "userId": "usr_3f9a", "deviceId": "dev_2b1", "ip": "203.0.113.7", "channel": "visa" },
+  "subject": { "userId": "usr_3f9a", "deviceId": "dev_2b1", "fingerprint": "fp_9c1e77a2b4", "ip": "203.0.113.7", "channel": "visa" },
   "instrument": { "kind": "card", "bin": "411111", "issuerCountry": "US", "threeDS": false }
 }`,
     response: `{
@@ -89,6 +90,54 @@ export const endpoints: Endpoint[] = [
       { name: "decidedAt", type: "string (ISO-8601)", required: true, desc: "When the verdict was reached." },
     ],
     note: "verdict is one of %allow% · %challenge% · %review% · %deny%. A review verdict opens a case. Send an Idempotency-Key to make retries safe.",
+  },
+  {
+    id: "decide-batch",
+    group: "Decisions",
+    method: "POST",
+    path: "/v1/decisions/batch",
+    auth: "apikey",
+    summary: "Score up to 100 events in one call",
+    description:
+      "Submit an array of events under `events`; each is scored independently and the response preserves order. A malformed event fails only its own entry (ok:false) — the rest still return verdicts. Idempotency is keyed per event by its id.",
+    headers: [{ name: "X-API-Key", type: "string", required: true, desc: "A service API key." }],
+    body: [{ name: "events", type: "Event[] (1–100)", required: true, desc: "The events to score. Each event is the same shape as POST /v1/decisions." }],
+    request: `{ "events": [
+  { "type": "card.authorize", "amount": 20, "currency": "USD", "subject": { "userId": "u1" } },
+  { "type": "account.login", "subject": { "userId": "u2", "fingerprint": "fp_x" } }
+] }`,
+    response: `{ "results": [
+  { "ok": true, "decision": { "id": "vd_…", "verdict": "%allow%", "score": 4, "reasons": [] } },
+  { "ok": false, "error": { "code": "INGEST_UNKNOWN_TYPE", "message": "unknown event type: …" } }
+] }`,
+    note: "Counts as one rate-limited request. Cap 100 events per call.",
+  },
+  {
+    id: "decide-async",
+    group: "Decisions",
+    method: "POST",
+    path: "/v1/decisions/async",
+    auth: "apikey",
+    summary: "Accept an event and score it off the response path",
+    description:
+      "Returns 202 immediately with the event id; the verdict is computed in the background, written durably, and fanned out on the bus (subscribe a webhook to verdict.reached.v1). Poll GET /v1/decisions/{id} for the result. Idempotency is keyed by the event id.",
+    headers: [{ name: "X-API-Key", type: "string", required: true, desc: "A service API key." }],
+    body: [{ name: "(event)", type: "Event", required: true, desc: "Same shape as POST /v1/decisions." }],
+    request: `{ "id": "evt_9f2a", "type": "card.authorize", "amount": 30, "currency": "USD", "subject": { "userId": "u1" } }`,
+    response: `{ "accepted": true, "id": "evt_9f2a", "correlationId": "cor_…" }`,
+    note: "202 Accepted. The verdict is not in this response — poll GET /v1/decisions/{id}.",
+  },
+  {
+    id: "decide-get",
+    group: "Decisions",
+    method: "GET",
+    path: "/v1/decisions/:id",
+    auth: "apikey",
+    summary: "Fetch a decision by event id",
+    description: "Returns the verdict for an event id (e.g. one submitted via /async). O(1) lookup. 404 while it is still pending or if the id is unknown.",
+    headers: [{ name: "X-API-Key", type: "string", required: true, desc: "A service API key." }],
+    response: `{ "id": "vd_…", "eventId": "evt_9f2a", "verdict": "%allow%", "score": 4, "reasons": [], "decidedAt": "2026-01-01T00:00:00.000Z" }`,
+    note: "404 with code NOT_FOUND while the async decision is still pending.",
   },
 
   // ── Auth ──────────────────────────────────────────────────
@@ -754,6 +803,62 @@ export const endpoints: Endpoint[] = [
     description: "Trigger a retention sweep immediately (the job also runs on a timer) and return how many records were pruned per collection.",
     response: `{ "ranAt": "2026-01-01T00:00:00.000Z",
   "pruned": { "verdicts": 0, "activity": 4, "replay": 4, "idempotency": 120, "deadLetter": 0 } }`,
+  },
+  {
+    id: "config-model",
+    group: "Settings",
+    method: "GET",
+    path: "/v1/config/model",
+    auth: "operator",
+    summary: "Scoring model status",
+    description:
+      "The active scorer (weighted / learned / ml) and, for the trained ML model, its provenance and per-feature weights. The model's weights can be bundled in the image, or loaded — and refreshed — from a local file (MODEL_PATH), an HTTPS URL (MODEL_URL), or S3-compatible object storage (MODEL_S3_*), so you retrain and roll out without a redeploy.",
+    response: `{ "scorer": "ml",
+  "ml": { "active": true, "source": "s3", "trainedAt": "2026-09-23",
+    "metrics": { "auc": 0.843, "accuracy": 0.873, "samples": 20000 }, "bias": -3.857,
+    "features": [ { "name": "device.fingerprintDeviceMismatch", "weight": 1.332 },
+      { "name": "geo.impossibleTravel", "weight": 1.237 } ] } }`,
+  },
+  {
+    id: "config-storage",
+    group: "Settings",
+    method: "GET",
+    path: "/v1/config/storage",
+    auth: "admin",
+    summary: "Get storage & disk health",
+    description:
+      "The document store's size and per-collection row counts, the health of the filesystems that data lives on (total / free / used — for monitoring Docker volumes), and a per-service breakdown of the space consumed on disk. All are sampled into /metrics each sweep (verdict_storage_*, verdict_disk_total_bytes, verdict_disk_free_bytes, verdict_disk_used_ratio, verdict_disk_component_bytes). Set DISK_HEALTH_PATHS to the volume mounts you want watched; the engine can only see filesystems mounted into its own container.",
+    response: `{ "totalBytes": 48210944,
+  "collections": [ { "name": "replay-samples", "rows": 91200 }, { "name": "verdicts", "rows": 91200 },
+    { "name": "activity", "rows": 91200 }, { "name": "audit-log", "rows": 312 } ],
+  "disks": [ { "path": "/var/lib/postgresql/data", "totalBytes": 53687091200, "freeBytes": 48800000000,
+    "usedBytes": 4887091200, "usedPercent": 9 } ],
+  "components": [ { "name": "Document store", "kind": "database", "bytes": 48210944 },
+    { "name": "ML model file", "kind": "model", "bytes": 2048, "path": "/models/verdict-weights.json" } ] }`,
+    responseFields: [
+      { name: "totalBytes", type: "number", required: true, desc: "Logical size of the document store on disk." },
+      { name: "collections", type: "{ name, rows }[]", required: true, desc: "Row count per collection." },
+      { name: "disks", type: "DiskUsage[]", required: true, desc: "Per-filesystem health: { path, totalBytes, freeBytes, usedBytes, usedPercent } for each monitored mount (deduplicated by filesystem)." },
+      { name: "components", type: "StorageComponent[]", required: true, desc: "Per-service disk breakdown: { name, kind: database|model, bytes, path? } — what is consuming the disk." },
+    ],
+  },
+  {
+    id: "audit-list",
+    group: "Settings",
+    method: "GET",
+    path: "/v1/audit",
+    auth: "admin",
+    summary: "List the config-change audit trail",
+    description:
+      "Newest-first, paginated record of every operator mutation — who changed what, when, and the result. Secret-ish request fields (URLs, tokens, passwords) are redacted before storage. Read-only.",
+    query: [
+      { name: "limit", type: "number", required: false, desc: "Page size (default 50, max 200)." },
+      { name: "offset", type: "number", required: false, desc: "Rows to skip (default 0)." },
+    ],
+    response: `{ "total": 42, "entries": [
+  { "id": "aud_…", "at": "2026-01-01T00:00:00.000Z", "actor": "admin@bank.com", "role": "admin",
+    "action": "PUT /v1/config/rate-limits", "status": 200, "params": { "decisionsPerMin": 1200 } }
+] }`,
   },
 
   // ── Labels & System ───────────────────────────────────────
