@@ -38,4 +38,4 @@ Three states, handled at the token level in `globals.css`: bare `:root` is the
 full light palette, `@media (prefers-color-scheme: dark)` (guarded against an
 explicit light choice) and `:root[data-theme="dark"]` redefine the tokens. The
 toggle sets `data-theme` and persists to `localStorage`; a tiny inline script in
-`layout.tsx` applies it before first paint.
+`layout.tsx` applies it before first paint!
