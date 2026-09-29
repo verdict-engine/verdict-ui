@@ -2,6 +2,7 @@ import { Logo } from "./Logo";
 import { ThemeToggle } from "./ThemeToggle";
 import { DocSearch } from "./DocSearch";
 import { GitHubStars } from "./GitHubStars";
+import { MobileMenu } from "./MobileMenu";
 import { withBase } from "@/lib/site";
 
 const links = [
@@ -31,6 +32,7 @@ export function Nav() {
           <DocSearch />
           <GitHubStars />
           <ThemeToggle />
+          <MobileMenu links={links} />
         </div>
       </div>
     </header>

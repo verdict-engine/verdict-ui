@@ -814,10 +814,11 @@ export const endpoints: Endpoint[] = [
     description:
       "The active scorer (weighted / learned / ml) and, for the trained ML model, its provenance and per-feature weights. The model's weights can be bundled in the image, or loaded — and refreshed — from a local file (MODEL_PATH), an HTTPS URL (MODEL_URL), or S3-compatible object storage (MODEL_S3_*), so you retrain and roll out without a redeploy.",
     response: `{ "scorer": "ml",
-  "ml": { "active": true, "source": "s3", "trainedAt": "2026-09-23",
+  "ml": { "active": true, "source": "s3", "provenance": "operator-supplied", "trainedAt": "2026-09-23",
     "metrics": { "auc": 0.843, "accuracy": 0.873, "samples": 20000 }, "bias": -3.857,
     "features": [ { "name": "device.fingerprintDeviceMismatch", "weight": 1.332 },
       { "name": "geo.impossibleTravel", "weight": 1.237 } ] } }`,
+    note: "provenance is 'synthetic-demo' while the bundled demonstration weights (trained on synthetic data — not a fraud model) are serving, and 'operator-supplied' once a model is loaded from MODEL_PATH / MODEL_URL / MODEL_S3_*.",
   },
   {
     id: "config-storage",
@@ -905,7 +906,21 @@ export const endpoints: Endpoint[] = [
     path: "/health",
     auth: "public",
     summary: "Liveness probe",
+    description: "The process is up. Use it for the liveness probe only; use /readyz for readiness.",
     response: `{ "status": "ok", "name": "verdict-engine", "version": "0.7.0" }`,
+  },
+  {
+    id: "readyz",
+    group: "System",
+    method: "GET",
+    path: "/readyz",
+    auth: "public",
+    summary: "Readiness probe",
+    description:
+      "Verifies the datastore is reachable (the query also confirms the schema/migrations are in place) and, when Redis is configured, that Redis answers. Returns 200 when the instance can serve durable decisions, or 503 until then. Point your orchestrator's readiness probe here.",
+    response: `{ "status": "ready", "version": "0.7.0",
+  "checks": { "store": "ok", "redis": "skipped" } }`,
+    note: "503 with { status: 'not_ready', checks } while a dependency is down. redis is 'skipped' when REDIS_URL is unset.",
   },
   {
     id: "metrics",

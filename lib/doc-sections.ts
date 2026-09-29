@@ -11,6 +11,7 @@ export const DOC_SECTIONS: [string, string][] = [
   ["signals", "Signals & rules"],
   ["verdicts", "Verdicts & scoring"],
   ["configure", "Configuration"],
+  ["dashboard", "Dashboard"],
   ["operate", "Operating"],
   ["intelligence", "Intelligence"],
   ["governance", "Data governance"],

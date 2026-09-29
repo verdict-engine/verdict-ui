@@ -1,4 +1,5 @@
 import { DocNav } from "./DocNav";
+import { ScreenshotGallery } from "./ScreenshotGallery";
 import { DOC_SECTIONS as SECTIONS } from "@/lib/doc-sections";
 import { withBase } from "@/lib/site";
 
@@ -806,6 +807,45 @@ export function DocsContent() {
                 invalid policy. All of this is live in the dashboard&apos;s <span className="mono">Configure</span>{" "}
                 tab, or over the <a href={withBase("/api-reference")}>config API</a>.
               </p>
+            </section>
+
+            <section id="dashboard" className="doc-sec">
+              <h3>The operator dashboard</h3>
+              <p>
+                Everything below is driven from a self-hosted operator console (a separate Next.js app that
+                talks to the engine&apos;s API). Analysts work the review queue and resolve cases; admins
+                configure rules, policies, scoring, retention, keys and webhooks — all server-side, nothing
+                the client can bypass.
+              </p>
+              <ScreenshotGallery
+                shots={[
+                  {
+                    src: "/screenshots/dashboard.jpg",
+                    alt: "Verdict operator dashboard — review queue",
+                    caption: "Review queue — cases the engine sent to review, ready to triage, assign and resolve.",
+                  },
+                  {
+                    src: "/screenshots/case.jpg",
+                    alt: "Case detail with risk score and resolution",
+                    caption: "Case detail — risk score, the event/verdict ids, and the resolution + audit trail.",
+                  },
+                  {
+                    src: "/screenshots/scoring-model.jpg",
+                    alt: "Configure — scoring model panel",
+                    caption: "Configure → Scoring model — the active scorer, model provenance and per-feature weights.",
+                  },
+                  {
+                    src: "/screenshots/storage.jpg",
+                    alt: "Configure — storage and server disk health",
+                    caption: "Configure → Storage — document-store size plus server-disk health per mount.",
+                  },
+                  {
+                    src: "/screenshots/analytics.jpg",
+                    alt: "Analytics read-model",
+                    caption: "Analytics — decision and outcome rollups, projected from the verdict log.",
+                  },
+                ]}
+              />
             </section>
 
             <section id="operate" className="doc-sec">
