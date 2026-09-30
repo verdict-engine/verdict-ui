@@ -929,7 +929,7 @@ export const endpoints: Endpoint[] = [
     path: "/metrics",
     auth: "public",
     summary: "Prometheus metrics",
-    description: "Operational metrics in Prometheus text format — decision latency & outcomes, 429s, degraded decisions, and outbox/webhook delivery counters and queue depth. Keep this on the private port.",
+    description: "Operational metrics in Prometheus text format — decision latency & outcomes, 429s, degraded decisions, storage/disk, and outbox/webhook/notification delivery counters and queue depth. Public by default (keep it on a private port); set METRICS_TOKEN to require an Authorization: Bearer token.",
     response: `# HELP verdict_decisions_total Decisions returned, by verdict\n# TYPE verdict_decisions_total counter\nverdict_decisions_total{verdict="allow",cached="false"} 128`,
   },
 ];
