@@ -1,3 +1,5 @@
+import { REPO_URL, withBase } from "@/lib/site";
+
 export function FinalCta() {
   return (
     <section className="block">
@@ -14,10 +16,10 @@ export function FinalCta() {
             your own timeline.
           </p>
           <div className="cta-row">
-            <a className="btn primary" href="#">
+            <a className="btn primary" href={withBase("/docs")}>
               Get Started →
             </a>
-            <a className="btn ghost" href="#">
+            <a className="btn ghost" href={REPO_URL} target="_blank" rel="noopener noreferrer">
               ★ Star on GitHub
             </a>
           </div>

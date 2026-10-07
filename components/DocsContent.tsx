@@ -149,6 +149,11 @@ const RESPONSE = `{
     { "tag": "takeover", "points": 33 },
     { "tag": "no_3ds",   "points": 22 }
   ],
+  "reasonCodes": [
+    { "code": "ACCOUNT_TAKEOVER", "category": "authentication" },
+    { "code": "AUTH_WEAK",        "category": "authentication" }
+  ],
+  "customerMessage": "This transaction is being reviewed and will be processed shortly.",
   "policyId": "pol_card_authorize", "policyVersion": "v0.4.0",
   "decidedAt": "2026-09-17T10:22:00.000Z"
 }`;
@@ -381,6 +386,14 @@ export function DocsContent() {
               </p>
               <pre className="doc-code">{RESPONSE}</pre>
               <p>
+                A decline explains itself to three audiences without tipping off a fraudster:{" "}
+                <span className="mono">reasons</span> (the exact rules that fired, for your analysts),{" "}
+                <span className="mono">reasonCodes</span> (stable codes like{" "}
+                <span className="mono">ACCOUNT_TAKEOVER</span> for your ops/dispute team), and{" "}
+                <span className="mono">customerMessage</span> (one vague, verdict-level line safe to show the
+                cardholder — it never names a signal).
+              </p>
+              <p>
                 Every field of the request and response is defined in the{" "}
                 <a href={withBase("/api-reference")}>API reference</a>. Prefer a client library? The{" "}
                 <a href="#sdks">official SDKs</a> wrap all of this — typed calls, retries and timeouts included.
@@ -539,8 +552,10 @@ export function DocsContent() {
                 <li>
                   <b>Backtest before you publish, and roll out gradually.</b> Replay any rule or policy change
                   against your labeled history first. When you go live, start lenient — or run in{" "}
-                  <b>shadow mode</b>, logging the verdict without enforcing it — then tighten the bands as the
-                  data confirms them.
+                  <b>shadow mode</b> (<span className="mono">X-Verdict-Mode: shadow</span>), which scores live
+                  traffic without enforcing it. Read <span className="mono">GET /v1/shadow/report</span> to see what
+                  Verdict would have blocked and — as chargebacks land — what share of confirmed fraud it would have
+                  caught vs your current rules, then tighten the bands as the data confirms them.
                 </li>
                 <li>
                   <b>Audit what you send.</b> Send a card <span className="mono">bin</span> only, never a full
@@ -788,6 +803,41 @@ export function DocsContent() {
                 as events (analyst resolutions and chargebacks), the same loop that improves the adaptive scorer
                 is the training set for the ML model.
               </p>
+            </section>
+
+            <section id="reason-codes" className="doc-sec">
+              <h3>Reason codes</h3>
+              <p>
+                Every verdict carries three layers of &quot;why&quot;, each for a different audience, so a
+                decline can be explained without teaching a fraudster which rule fired:{" "}
+                <span className="mono">reasons</span> (the rule tags + points, for your analysts),{" "}
+                <span className="mono">reasonCodes</span> (the stable codes below, for your ops / dispute team),
+                and <span className="mono">customerMessage</span> (one vague line safe to show the cardholder).
+                The codes are a published contract — stable and safe to log, alert on, and map. A custom
+                (operator-authored) rule with no mapping returns <span className="mono">RISK_OTHER</span>.
+              </p>
+              <div className="api-params">
+                <div className="api-params-h">Reason code · category · meaning</div>
+                <table className="api-tbl doc-tbl">
+                  <tbody>
+                    <Field n="VELOCITY_HIGH" t="velocity" d="Too many attempts in a short window." />
+                    <Field n="ACCOUNT_TAKEOVER" t="authentication" d="New device combined with a location/SIM mismatch — possible takeover." />
+                    <Field n="AUTH_WEAK" t="authentication" d="Strong authentication (e.g. 3-D Secure) was absent on a risky transaction." />
+                    <Field n="DEVICE_NEW" t="device" d="First time this device/client has been seen." />
+                    <Field n="DEVICE_SHARED" t="device" d="Device shared across an unusual number of users." />
+                    <Field n="NETWORK_SHARED_IP" t="network" d="IP shared across an unusual number of users." />
+                    <Field n="NETWORK_RING" t="network" d="Entity sits in a dense cluster — a likely fraud ring." />
+                    <Field n="NETWORK_SIM" t="network" d="Phone/SIM shared across many users — possible SIM farm." />
+                    <Field n="AMOUNT_HIGH" t="amount" d="Transaction amount above the configured threshold." />
+                    <Field n="AMOUNT_ANOMALY" t="anomaly" d="Amount far outside this user's normal range." />
+                    <Field n="ANOMALY" t="anomaly" d="Behaviour outside this user's baseline (e.g. a dormant account spiking)." />
+                    <Field n="BLOCKLISTED" t="list" d="A subject on the block list." />
+                    <Field n="WATCHLISTED" t="list" d="A subject on the watch list — routed to review." />
+                    <Field n="SYSTEM_DEGRADED" t="system" d="A dependency was degraded; the policy's fail-open/closed verdict was applied." />
+                    <Field n="RISK_OTHER" t="other" d="A custom (operator-authored) rule fired, with no mapped code." />
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             <section id="configure" className="doc-sec">

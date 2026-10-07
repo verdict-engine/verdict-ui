@@ -1,4 +1,5 @@
 import { Logo } from "./Logo";
+import { REPO_URL, withBase } from "@/lib/site";
 
 export function Footer() {
   return (
@@ -10,14 +11,11 @@ export function Footer() {
         </a>
         <span className="lbl">Apache-2.0 · built for the request path</span>
         <span className="rt">
-          <a className="lbl" href="#">
+          <a className="lbl" href={withBase("/docs")}>
             Docs
           </a>
-          <a className="lbl" href="#">
+          <a className="lbl" href={REPO_URL} target="_blank" rel="noopener noreferrer">
             GitHub
-          </a>
-          <a className="lbl" href="#">
-            Discord
           </a>
         </span>
       </div>

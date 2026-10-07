@@ -49,6 +49,7 @@ export const endpoints: Endpoint[] = [
       { name: "X-API-Key", type: "string", required: true, desc: "A service API key created by an admin in the dashboard." },
       { name: "Idempotency-Key", type: "string", required: false, desc: "Retry-safe: the same key returns the original decision instead of recomputing. Defaults to the event id." },
       { name: "X-Correlation-Id", type: "string", required: false, desc: "Threaded through logs and events for tracing." },
+      { name: "X-Verdict-Mode", type: '"enforce" | "shadow"', required: false, desc: "shadow scores the event without acting on it — logged for comparison, no webhook/notification fan-out and no review case. Default enforce. See GET /v1/shadow/report." },
     ],
     body: [
       { name: "type", type: '"card.authorize" | "card.capture" | "card.refund" | "payment.authorize" | "wallet.withdraw" | "account.login" | "order.place"', required: true, desc: "Channel-agnostic event type. Selects which ruleset and policy apply." },
@@ -76,6 +77,8 @@ export const endpoints: Endpoint[] = [
   "id": "vd_0mu4…", "eventId": "evt_0mu4…",
   "verdict": "%review%", "score": 55,
   "reasons": [{ "tag": "takeover", "points": 33 }, { "tag": "no_3ds", "points": 22 }],
+  "reasonCodes": [{ "code": "ACCOUNT_TAKEOVER", "category": "authentication" }, { "code": "AUTH_WEAK", "category": "authentication" }],
+  "customerMessage": "This transaction is being reviewed and will be processed shortly.",
   "policyId": "pol_card_authorize", "policyVersion": "v0.4.0",
   "decidedAt": "2026-09-17T10:22:00.000Z"
 }`,
@@ -84,12 +87,15 @@ export const endpoints: Endpoint[] = [
       { name: "eventId", type: "string", required: true, desc: "The id assigned to this event. Use it to correlate a later chargeback label or case." },
       { name: "verdict", type: '"allow" | "challenge" | "review" | "deny"', required: true, desc: "The decision. allow = proceed; challenge = step-up (3DS/OTP); review = opens a case; deny = block." },
       { name: "score", type: "number (0–100)", required: true, desc: "The risk score the policy banded into the verdict. -1 for a list/degraded short-circuit that skipped scoring." },
-      { name: "reasons", type: "{ tag: string; points: number }[]", required: true, desc: "Every signal that fired and the points it contributed — the full, attributable explanation." },
+      { name: "reasons", type: "{ tag: string; points: number }[]", required: true, desc: "Analyst layer: every signal that fired and its points — the full, attributable explanation. Internal; never show a customer." },
+      { name: "reasonCodes", type: "{ code: string; category: string }[]", required: true, desc: "Merchant/dispute layer: stable, documented codes derived from the reasons (e.g. ACCOUNT_TAKEOVER, VELOCITY_HIGH). Safe to log and act on; never shown to the end customer." },
+      { name: "customerMessage", type: "string", required: true, desc: "End-customer layer: one vague, verdict-level line safe to show the cardholder. It never names a signal, so it can't be probed to learn which rule fired." },
       { name: "policyId", type: "string", required: true, desc: "The policy that decided this event." },
       { name: "policyVersion", type: "string", required: true, desc: "The exact policy version applied — pin for audit and replay." },
       { name: "decidedAt", type: "string (ISO-8601)", required: true, desc: "When the verdict was reached." },
+      { name: "shadow", type: "boolean", required: false, desc: "Present and true only when scored in shadow mode (X-Verdict-Mode: shadow) — logged, not enforced." },
     ],
-    note: "verdict is one of %allow% · %challenge% · %review% · %deny%. A review verdict opens a case. Send an Idempotency-Key to make retries safe.",
+    note: "Three reason layers — reasons (analyst) · reasonCodes (merchant/dispute) · customerMessage (end customer) — so a decline explains itself to each audience without tipping off a fraudster. A review verdict opens a case. Send an Idempotency-Key to make retries safe.",
   },
   {
     id: "decide-batch",
@@ -100,7 +106,10 @@ export const endpoints: Endpoint[] = [
     summary: "Score up to 100 events in one call",
     description:
       "Submit an array of events under `events`; each is scored independently and the response preserves order. A malformed event fails only its own entry (ok:false) — the rest still return verdicts. Idempotency is keyed per event by its id.",
-    headers: [{ name: "X-API-Key", type: "string", required: true, desc: "A service API key." }],
+    headers: [
+      { name: "X-API-Key", type: "string", required: true, desc: "A service API key." },
+      { name: "X-Verdict-Mode", type: '"enforce" | "shadow"', required: false, desc: "shadow scores every event in the batch without enforcing. Default enforce." },
+    ],
     body: [{ name: "events", type: "Event[] (1–100)", required: true, desc: "The events to score. Each event is the same shape as POST /v1/decisions." }],
     request: `{ "events": [
   { "type": "card.authorize", "amount": 20, "currency": "USD", "subject": { "userId": "u1" } },
@@ -121,7 +130,10 @@ export const endpoints: Endpoint[] = [
     summary: "Accept an event and score it off the response path",
     description:
       "Returns 202 immediately with the event id; the verdict is computed in the background, written durably, and fanned out on the bus (subscribe a webhook to verdict.reached.v1). Poll GET /v1/decisions/{id} for the result. Idempotency is keyed by the event id.",
-    headers: [{ name: "X-API-Key", type: "string", required: true, desc: "A service API key." }],
+    headers: [
+      { name: "X-API-Key", type: "string", required: true, desc: "A service API key." },
+      { name: "X-Verdict-Mode", type: '"enforce" | "shadow"', required: false, desc: "shadow scores without enforcing. Default enforce." },
+    ],
     body: [{ name: "(event)", type: "Event", required: true, desc: "Same shape as POST /v1/decisions." }],
     request: `{ "id": "evt_9f2a", "type": "card.authorize", "amount": 30, "currency": "USD", "subject": { "userId": "u1" } }`,
     response: `{ "accepted": true, "id": "evt_9f2a", "correlationId": "cor_…" }`,
@@ -136,8 +148,40 @@ export const endpoints: Endpoint[] = [
     summary: "Fetch a decision by event id",
     description: "Returns the verdict for an event id (e.g. one submitted via /async). O(1) lookup. 404 while it is still pending or if the id is unknown.",
     headers: [{ name: "X-API-Key", type: "string", required: true, desc: "A service API key." }],
-    response: `{ "id": "vd_…", "eventId": "evt_9f2a", "verdict": "%allow%", "score": 4, "reasons": [], "decidedAt": "2026-01-01T00:00:00.000Z" }`,
+    response: `{ "id": "vd_…", "eventId": "evt_9f2a", "verdict": "%allow%", "score": 4, "reasons": [], "reasonCodes": [], "customerMessage": "Approved.", "decidedAt": "2026-01-01T00:00:00.000Z" }`,
     note: "404 with code NOT_FOUND while the async decision is still pending.",
+  },
+  {
+    id: "shadow-report",
+    group: "Decisions",
+    method: "GET",
+    path: "/v1/shadow/report",
+    auth: "operator",
+    summary: "Shadow-mode comparison report",
+    description:
+      "Summarizes decisions scored in shadow mode (X-Verdict-Mode: shadow) over the last `days`: what the policy would have blocked, and — as chargeback labels arrive — what share of confirmed fraud it would have caught vs missed. The report to compare Verdict against your current rules before switching. Scans the most-recent `limit` decisions.",
+    headers: [{ name: "Authorization", type: "string", required: true, desc: "Bearer <operator token>." }],
+    query: [
+      { name: "days", type: "number", required: false, desc: "Lookback window in days. Default 30." },
+      { name: "limit", type: "number", required: false, desc: "Most-recent decisions to scan (1–100000). Default 10000." },
+    ],
+    response: `{
+  "window": { "sinceDays": 30, "from": "2026-09-07T00:00:00.000Z" },
+  "scanned": 10000, "total": 1840,
+  "byVerdict": { "allow": 1600, "challenge": 90, "review": 120, "deny": 30 },
+  "wouldBlockRate": 0.081, "challengeRate": 0.049,
+  "labeledFraud": 22, "caught": 19, "missed": 3, "catchRate": 0.8636
+}`,
+    responseFields: [
+      { name: "total", type: "number", required: true, desc: "Shadow decisions found in the window." },
+      { name: "byVerdict", type: "Record<verdict, number>", required: true, desc: "Shadow decisions by verdict." },
+      { name: "wouldBlockRate", type: "number", required: true, desc: "Fraction the shadow policy would have stopped (review + deny) — compare against your current rules at parity." },
+      { name: "labeledFraud", type: "number", required: true, desc: "Shadow decisions that now carry a confirmed-fraud label (grows as chargebacks arrive)." },
+      { name: "caught", type: "number", required: true, desc: "Of the labeled fraud, how many the shadow verdict would have stopped (review/deny)." },
+      { name: "missed", type: "number", required: true, desc: "Of the labeled fraud, how many it would have let through (allow/challenge)." },
+      { name: "catchRate", type: "number", required: true, desc: "caught / labeledFraud — confirmed-fraud catch rate of the shadow policy." },
+    ],
+    note: "Run a week of live traffic in shadow mode, then read this report to see Verdict scored side-by-side with your current rules.",
   },
 
   // ── Auth ──────────────────────────────────────────────────
@@ -235,6 +279,38 @@ export const endpoints: Endpoint[] = [
     summary: "Refresh the token",
     description: "Exchanges a still-valid token for a fresh one (sliding session). The old token stays valid until it expires.",
     response: `{ "token": "eyJ…", "user": { "email": "maya@bank.com", "role": "analyst" } }`,
+  },
+
+  // ── Tenants ───────────────────────────────────────────────
+  {
+    id: "list-orgs",
+    group: "Tenants",
+    method: "GET",
+    path: "/v1/orgs",
+    auth: "admin",
+    summary: "List tenants",
+    description:
+      "Lists every org. Multi-tenant: each org's decision data, API keys, operators, and decisioning config (policies, rules, lists) are isolated — one tenant can never see another's. Restricted to an admin of the root org.",
+    headers: [{ name: "Authorization", type: "string", required: true, desc: "Bearer <root-org admin token>." }],
+    response: `[{ "id": "default", "name": "Default", "createdAt": "…" }, { "id": "org_7f2a", "name": "Acme", "createdAt": "…" }]`,
+    note: "The tenant of a request is derived server-side from the API key / token, never from the client — it cannot be spoofed. Single-tenant deployments run entirely in the default org.",
+  },
+  {
+    id: "create-org",
+    group: "Tenants",
+    method: "POST",
+    path: "/v1/orgs",
+    auth: "admin",
+    summary: "Provision a tenant",
+    description: "Creates an org and its first admin operator in one step. That admin then logs in, mints API keys, and operates in isolation. Root-org admins only.",
+    headers: [{ name: "Authorization", type: "string", required: true, desc: "Bearer <root-org admin token>." }],
+    body: [
+      { name: "name", type: "string", required: true, desc: "Display name for the tenant." },
+      { name: "adminEmail", type: "string", required: true, desc: "Email for the tenant's first admin operator." },
+      { name: "adminPassword", type: "string", required: true, desc: "Password for that admin (min 8 chars)." },
+    ],
+    request: `{ "name": "Acme", "adminEmail": "admin@acme.com", "adminPassword": "••••••••" }`,
+    response: `{ "org": { "id": "org_7f2a", "name": "Acme", "createdAt": "…" }, "admin": { "email": "admin@acme.com", "role": "admin", "createdAt": "…" } }`,
   },
 
   // ── Cases ─────────────────────────────────────────────────

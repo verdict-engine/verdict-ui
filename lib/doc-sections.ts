@@ -10,6 +10,7 @@ export const DOC_SECTIONS: [string, string][] = [
   ["events", "Events & fields"],
   ["signals", "Signals & rules"],
   ["verdicts", "Verdicts & scoring"],
+  ["reason-codes", "Reason codes"],
   ["configure", "Configuration"],
   ["dashboard", "Dashboard"],
   ["operate", "Operating"],

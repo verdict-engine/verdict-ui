@@ -16,6 +16,10 @@ describe("docs search — semantic / synonym matching", () => {
     expect(hrefs("gdpr delete a user")).toContain("/docs#governance");
     // "cloud model" → the hot-swappable model passage under #verdicts
     expect(hrefs("load model from the cloud")).toContain("/docs#verdicts");
+    // reason/decline codes → the reason-code reference under #reason-codes
+    expect(hrefs("reason codes")).toContain("/docs#reason-codes");
+    expect(hrefs("decline code catalog")).toContain("/docs#reason-codes");
+    expect(hrefs("why was the payment blocked")).toContain("/docs#reason-codes");
   });
 
   it("ranks the most relevant passage first and returns a real sentence as the snippet", () => {

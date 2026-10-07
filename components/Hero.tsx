@@ -18,7 +18,7 @@ export function Hero() {
           you can split into services the day you outgrow it.
         </p>
         <div className="cta-row">
-          <a className="btn primary" href="#">
+          <a className="btn primary" href={withBase("/docs")}>
             Get Started →
           </a>
           <a className="btn ghost cross" href="#architecture">
