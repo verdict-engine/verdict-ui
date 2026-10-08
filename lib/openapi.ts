@@ -153,7 +153,7 @@ export function buildOpenApi(): Schema {
     openapi: "3.1.0",
     info: {
       title: "Verdict Engine API",
-      version: "0.7.0",
+      version: "1.0.3-beta",
       description:
         "The self-hosted Verdict fraud & risk decisioning engine. Send an event, get an auditable verdict. Base URL is the engine you deploy.",
       license: { name: "Apache-2.0" },

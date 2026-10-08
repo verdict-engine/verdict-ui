@@ -249,8 +249,9 @@ export function DocsContent() {
         <div className="doc-beta" role="note">
           <span className="doc-beta-tag mono">Beta</span>
           <p>
-            Verdict is <b>currently in beta</b> (<span className="mono">v0.7.0</span>, pre-1.0). It&apos;s
-            functional and self-hostable, but APIs, schemas, and defaults may still change between releases —{" "}
+            Verdict is <b>currently in beta</b> (<span className="mono">v1.0.3-beta</span>, a pre-release of
+            1.0). It&apos;s functional and self-hostable, but APIs, schemas, and defaults may still change
+            before the stable 1.0 —{" "}
             <b>pin a version</b>, review the changelog before upgrading, and evaluate carefully before relying
             on it in production. It&apos;s open source (Apache-2.0); issues and contributions are welcome.
           </p>

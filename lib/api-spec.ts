@@ -983,7 +983,7 @@ export const endpoints: Endpoint[] = [
     auth: "public",
     summary: "Liveness probe",
     description: "The process is up. Use it for the liveness probe only; use /readyz for readiness.",
-    response: `{ "status": "ok", "name": "verdict-engine", "version": "0.7.0" }`,
+    response: `{ "status": "ok", "name": "verdict-engine", "version": "1.0.3-beta" }`,
   },
   {
     id: "readyz",
@@ -994,7 +994,7 @@ export const endpoints: Endpoint[] = [
     summary: "Readiness probe",
     description:
       "Verifies the datastore is reachable (the query also confirms the schema/migrations are in place) and, when Redis is configured, that Redis answers. Returns 200 when the instance can serve durable decisions, or 503 until then. Point your orchestrator's readiness probe here.",
-    response: `{ "status": "ready", "version": "0.7.0",
+    response: `{ "status": "ready", "version": "1.0.3-beta",
   "checks": { "store": "ok", "redis": "skipped" } }`,
     note: "503 with { status: 'not_ready', checks } while a dependency is down. redis is 'skipped' when REDIS_URL is unset.",
   },

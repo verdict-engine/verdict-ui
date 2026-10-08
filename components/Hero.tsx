@@ -7,7 +7,7 @@ export function Hero() {
       <div className="wrap">
         <a className="announce mono" href={withBase("/docs")}>
           <span className="arw">▲</span> Beta{" "}
-          <b>| Verdict is currently in beta — v0.7.0, pre-1.0</b> <span className="arw">→</span>
+          <b>| Verdict is currently in beta — v1.0.3-beta</b> <span className="arw">→</span>
         </a>
         <h1 className="headline">
           The open-source fraud engine that returns a verdict.
